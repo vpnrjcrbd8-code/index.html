@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether — Pencarian Pribadi & VPN</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Latar belakang polos sangat bersih dengan gradasi lembut */
+        body {
+            background: linear-gradient(160deg, #0b0f17 0%, #111827 55%, #0c121e 100%);
+            background-attachment: fixed;
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+
+        /* Lapisan kaca transparan ultra-minimalis */
+        .glass-thin {
+            background: rgba(255, 255, 255, 0.035);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+        }
+
+        .glass-thin:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.16);
+        }
+
+        .glass-search {
+            background: rgba(255, 255, 255, 0.045);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            transition: all 0.2s ease;
+        }
+
+        .glass-search:focus-within {
+            background: rgba(255, 255, 255, 0.07);
+            border-color: rgba(255, 255, 255, 0.26);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        .glass-popover {
+            background: rgba(15, 21, 33, 0.86);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.11);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+        }
+
+        /* Scrollbar halus */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.14);
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-white/20 selection:text-white">
+
+    <!-- HEADER POLOS & TIPIS -->
+    <header class="sticky top-0 z-40 w-full">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+            
+            <!-- Brand Minimalis (Kiri) -->
+            <button onclick="resetToHome()" class="flex items-center gap-2 text-slate-200 hover:text-white transition focus:outline-none">
+                <svg class="w-4 h-4 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <span class="font-medium tracking-tight text-base">Aether</span>
+            </button>
+
+            <!-- Bar Pencarian Header (Hanya muncul saat di halaman hasil pencarian) -->
+            <div id="headerSearchContainer" class="hidden flex-1 max-w-lg mx-2">
+                <form onsubmit="handleSearchSubmit(event, 'headerSearchInput')" class="glass-search rounded-full flex items-center px-3.5 py-1.5">
+                    <svg class="w-3.5 h-3.5 text-slate-400 mr-2.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                    </svg>
+                    <input 
+                        id="headerSearchInput" 
+                        type="text" 
+                        placeholder="Cari secara pribadi..." 
+                        autocomplete="off"
+                        class="w-full bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none"
+                    >
+                    <button type="button" onclick="clearSearchInput('headerSearchInput')" class="text-slate-400 hover:text-white p-1" aria-label="Hapus teks">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Kontrol Kanan Atas (VPN, Perisai Data, Hapus Sesi) -->
+            <div class="relative flex items-center gap-2">
+                
+                <!-- Tombol VPN -->
+                <button onclick="togglePopover('vpnPopover')" id="vpnTriggerBtn" class="glass-thin rounded-full px-3 py-1.5 flex items-center gap-2 text-xs text-slate-200 transition cursor-pointer">
+                    <span id="vpnDot" class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span id="vpnLabel">VPN: Switzerland</span>
+                </button>
+
+                <!-- Tombol Perisai Data -->
+                <button onclick="togglePopover('shieldPopover')" id="shieldTriggerBtn" class="glass-thin rounded-full px-3 py-1.5 flex items-center gap-1.5 text-xs text-slate-200 transition cursor-pointer">
+                    <svg class="w-3.5 h-3.5 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <span class="hidden sm:inline">Perisai Data</span>
+                    <span id="shieldBadgeCount" class="text-[11px] font-mono text-slate-400">128</span>
+                </button>
+
+                <!-- Tombol Hapus Sesi -->
+                <button onclick="burnSession()" title="Hapus Sesi & Rotasi IP" class="glass-thin rounded-full p-2 text-slate-300 hover:text-white transition cursor-pointer" aria-label="Hapus Sesi">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    </svg>
+                </button>
+
+                <!-- POPOVER 1: KONTROL VPN POLOS -->
+                <div id="vpnPopover" class="hidden absolute right-0 top-11 w-72 sm:w-80 glass-popover rounded-2xl p-4 z-50 text-xs">
+                    <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                        <div>
+                            <p id="vpnPopoverStatus" class="font-medium text-white">Terowongan VPN Aktif</p>
+                            <p id="vpnPopoverIp" class="font-mono text-[11px] text-slate-400 mt-0.5">IP: 185.212.44.91 • 24 ms</p>
+                        </div>
+                        <button onclick="toggleVpn()" id="vpnSwitchBtn" class="px-3 py-1 rounded-full text-[11px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/30 transition">
+                            Aktif
+                        </button>
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between text-[11px] text-slate-400 mb-2">
+                            <span>Lokasi Server</span>
+                            <button onclick="rotateIpAddress()" class="text-slate-300 hover:text-white underline">Rotasi IP</button>
+                        </div>
+                        <div id="vpnServerList" class="space-y-1 max-h-48 overflow-y-auto pr-1">
+                            <!-- Diisi via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- POPOVER 2: PENGAMAN DATA POLOS -->
+                <div id="shieldPopover" class="hidden absolute right-0 top-11 w-72 sm:w-80 glass-popover rounded-2xl p-4 z-50 text-xs">
+                    <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                        <div>
+                            <p class="font-medium text-white">Pengaman Data & Privasi</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5"><span id="popoverBlockedNum" class="text-slate-200 font-mono">128</span> pelacak diblokir sesi ini</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 space-y-2.5">
+                        <label class="flex items-center justify-between cursor-pointer py-1">
+                            <span class="text-slate-300">Blokir Pelacak & Cookie</span>
+                            <input type="checkbox" checked onchange="toggleShieldOption('Pemblokir Pelacak', this.checked)" class="accent-slate-200 w-3.5 h-3.5 rounded cursor-pointer">
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer py-1">
+                            <span class="text-slate-300">Paksa Koneksi HTTPS</span>
+                            <input type="checkbox" checked onchange="toggleShieldOption('HTTPS-Only', this.checked)" class="accent-slate-200 w-3.5 h-3.5 rounded cursor-pointer">
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer py-1">
+                            <span class="text-slate-300">Cegah Kebocoran DNS / WebRTC</span>
+                            <input type="checkbox" checked onchange="toggleShieldOption('Proteksi DNS/WebRTC', this.checked)" class="accent-slate-200 w-3.5 h-3.5 rounded cursor-pointer">
+                        </label>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- KONTEN UTAMA -->
+    <main class="flex-1 flex flex-col">
+
+        <!-- ============================================================== -->
+        <!-- TAMPILAN 1: BERANDA ULTRA-MINIMALIS                            -->
+        <!-- ============================================================== -->
+        <section id="homeView" class="flex-1 flex flex-col items-center justify-center px-4 pb-16 max-w-2xl mx-auto w-full">
+            
+            <!-- Judul Teks Polos -->
+            <h1 class="text-3xl sm:text-5xl font-light tracking-tight text-white mb-7 select-none">
+                Aether
+            </h1>
+
+            <!-- Kotak Pencarian Transparan Ramping -->
+            <div class="w-full relative">
+                <form onsubmit="handleSearchSubmit(event, 'mainSearchInput')" class="glass-search rounded-full px-4 py-2.5 sm:py-3 flex items-center gap-3">
+                    <svg class="w-4 h-4 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                    </svg>
+                    <input 
+                        id="mainSearchInput" 
+                        type="text" 
+                        placeholder="Telusuri web secara pribadi..." 
+                        autocomplete="off"
+                        oninput="handleSearchInput(this.value)"
+                        onfocus="handleSearchInput(this.value)"
+                        class="w-full bg-transparent text-sm sm:text-base text-white placeholder-slate-400 focus:outline-none"
+                    >
+                    <button type="button" id="clearMainBtn" onclick="clearSearchInput('mainSearchInput')" class="hidden text-slate-400 hover:text-white p-1 transition" aria-label="Hapus">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                        </svg>
+                    </button>
+                    <button type="submit" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition shrink-0" aria-label="Cari">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                        </svg>
+                    </button>
+                </form>
+
+                <!-- Dropdown Saran Pencarian Minimalis -->
+                <div id="autocompleteBox" class="hidden absolute left-0 right-0 mt-2 glass-popover rounded-2xl overflow-hidden py-1.5 z-30">
+                    <div id="autocompleteList"></div>
+                </div>
+            </div>
+
+            <!-- 3 Chip Pintasan Tipis & Polos -->
+            <div class="flex flex-wrap items-center justify-center gap-2 mt-5">
+                <button onclick="quickSearch('Berita Teknologi Hari Ini')" class="glass-thin rounded-full px-3.5 py-1 text-xs text-slate-300 hover:text-white transition">
+                    Teknologi
+                </button>
+                <button onclick="quickSearch('Keamanan Data & Enkripsi')" class="glass-thin rounded-full px-3.5 py-1 text-xs text-slate-300 hover:text-white transition">
+                    Keamanan Data
+                </button>
+                <button onclick="quickSearch('Uji Kebocoran DNS & IP')" class="glass-thin rounded-full px-3.5 py-1 text-xs text-slate-300 hover:text-white transition">
+                    Cek IP & DNS
+                </button>
+            </div>
+
+        </section>
+
+        <!-- ============================================================== -->
+        <!-- TAMPILAN 2: HALAMAN HASIL PENCARIAN BERSIH                     -->
+        <!-- ============================================================== -->
+        <section id="resultsView" class="hidden flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 pt-2 pb-12">
+            
+            <!-- Tab Filter Polos -->
+            <div class="flex items-center justify-between border-b border-white/10 pb-2.5 mb-6 text-xs">
+                <div class="flex items-center gap-4">
+                    <button onclick="setFilterTab('all')" data-tab="all" class="res-tab text-white font-medium border-b-2 border-white pb-2.5 -mb-[11px] transition">
+                        Semua
+                    </button>
+                    <button onclick="setFilterTab('news')" data-tab="news" class="res-tab text-slate-400 hover:text-slate-200 pb-2.5 -mb-[11px] transition">
+                        Berita
+                    </button>
+                    <button onclick="setFilterTab('images')" data-tab="images" class="res-tab text-slate-400 hover:text-slate-200 pb-2.5 -mb-[11px] transition">
+                        Gambar
+                    </button>
+                    <button onclick="setFilterTab('maps')" data-tab="maps" class="res-tab text-slate-400 hover:text-slate-200 pb-2.5 -mb-[11px] transition">
+                        Peta
+                    </button>
+                </div>
+                <span id="resultsStatsText" class="text-[11px] text-slate-400 hidden sm:inline">
+                    Terenkripsi • 0.11 dtk
+                </span>
+            </div>
+
+            <!-- Kontainer Daftar Hasil -->
+            <div id="resultsContainer" class="space-y-4"></div>
+
+        </section>
+
+    </main>
+
+    <!-- FOOTER TIPIS -->
+    <footer class="w-full py-4 px-4 text-center text-[11px] text-slate-500">
+        <span>Enkripsi AES-256 • Tanpa Log • DNS Terlindungi</span>
+    </footer>
+
+    <!-- TOAST NOTIFIKASI MINIMALIS -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- ================================================================== -->
+    <!-- LOGIKA JAVASCRIPT                                                  -->
+    <!-- ================================================================== -->
+    <script>
+        // Data Server VPN
+        const servers = [
+            { id: 'ch', name: 'Switzerland', city: 'Zurich', ip: '185.212.44.91', ping: '24 ms' },
+            { id: 'sg', name: 'Singapore', city: 'Singapore', ip: '103.253.145.22', ping: '14 ms' },
+            { id: 'jp', name: 'Japan', city: 'Tokyo', ip: '45.134.212.88', ping: '38 ms' },
+            { id: 'nl', name: 'Netherlands', city: 'Amsterdam', ip: '193.32.126.19', ping: '29 ms' },
+            { id: 'is', name: 'Iceland', city: 'Reykjavik', ip: '82.221.105.64', ping: '42 ms' }
+        ];
+
+        // Saran kata kunci
+        const suggestionsPool = [
+            'Berita teknologi dan keamanan siber terbaru',
+            'Cara kerja enkripsi VPN AES-256',
+            'Perlindungan privasi data pribadi di internet',
+            'Uji kebocoran DNS dan alamat IP virtual',
+            'Rekomendasi peramban dan mesin pencari tanpa pelacak'
+        ];
+
+        // State Aplikasi
+        const state = {
+            vpnOn: true,
+            server: servers[0],
+            blockedTrackers: 128,
+            query: '',
+            tab: 'all'
+        };
+
+        // Inisialisasi
+        document.addEventListener('DOMContentLoaded', () => {
+            renderServerList();
+            syncSecurityUI();
+
+            // Tutup popover saat klik di luar
+            document.addEventListener('click', (e) => {
+                const vpnPop = document.getElementById('vpnPopover');
+                const shieldPop = document.getElementById('shieldPopover');
+                const vpnBtn = document.getElementById('vpnTriggerBtn');
+                const shieldBtn = document.getElementById('shieldTriggerBtn');
+                const autoBox = document.getElementById('autocompleteBox');
+                const mainInput = document.getElementById('mainSearchInput');
+
+                if (!vpnPop.contains(e.target) && !vpnBtn.contains(e.target)) {
+                    vpnPop.classList.add('hidden');
+                }
+                if (!shieldPop.contains(e.target) && !shieldBtn.contains(e.target)) {
+                    shieldPop.classList.add('hidden');
+                }
+                if (autoBox && !autoBox.contains(e.target) && e.target !== mainInput) {
+                    autoBox.classList.add('hidden');
+                }
+            });
+        });
+
+        // Toggle Popover Header
+        function togglePopover(id) {
+            const target = document.getElementById(id);
+            const otherId = id === 'vpnPopover' ? 'shieldPopover' : 'vpnPopover';
+            document.getElementById(otherId).classList.add('hidden');
+            target.classList.toggle('hidden');
+        }
+
+        // Notifikasi Toast Halus
+        function notify(message) {
+            const container = document.getElementById('toastContainer');
+            const el = document.createElement('div');
+            el.className = 'glass-popover rounded-full px-4 py-2 text-xs text-slate-200 shadow-lg transition-all duration-300 opacity-0 translate-y-2';
+            el.textContent = message;
+            container.appendChild(el);
+
+            requestAnimationFrame(() => {
+                el.classList.remove('opacity-0', 'translate-y-2');
+            });
+
+            setTimeout(() => {
+                el.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => el.remove(), 300);
+            }, 2600);
+        }
+
+        // Kontrol VPN
+        function renderServerList() {
+            const list = document.getElementById('vpnServerList');
+            list.innerHTML = servers.map(s => {
+                const active = state.server.id === s.id;
+                return `
+                    <button onclick="selectServer('${s.id}')" class="w-full px-2.5 py-2 rounded-xl flex items-center justify-between text-left transition ${active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5'}">
+                        <span>${s.name} <span class="text-slate-500">(${s.city})</span></span>
+                        <span class="font-mono text-[11px] ${active ? 'text-emerald-400' : 'text-slate-500'}">${s.ping}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function selectServer(id) {
+            const found = servers.find(s => s.id === id);
+            if (!found) return;
+            state.server = found;
+            state.vpnOn = true;
+            renderServerList();
+            syncSecurityUI();
+            notify(`Terhubung ke VPN ${found.name}`);
+        }
+
+        function toggleVpn() {
+            state.vpnOn = !state.vpnOn;
+            syncSecurityUI();
+            notify(state.vpnOn ? `VPN Aktif (${state.server.name})` : 'VPN Dinonaktifkan');
+        }
+
+        function rotateIpAddress() {
+            const parts = state.server.ip.split('.');
+            parts[3] = Math.floor(Math.random() * 210) + 15;
+            state.server.ip = parts.join('.');
+            state.vpnOn = true;
+            syncSecurityUI();
+            notify(`IP baru ditetapkan: ${state.server.ip}`);
+        }
+
+        function toggleShieldOption(label, checked) {
+            notify(`${label}: ${checked ? 'Aktif' : 'Nonaktif'}`);
+        }
+
+        function syncSecurityUI() {
+            const dot = document.getElementById('vpnDot');
+            const label = document.getElementById('vpnLabel');
+            const popStatus = document.getElementById('vpnPopoverStatus');
+            const popIp = document.getElementById('vpnPopoverIp');
+            const switchBtn = document.getElementById('vpnSwitchBtn');
+
+            if (state.vpnOn) {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+                label.textContent = `VPN: ${state.server.name}`;
+                popStatus.textContent = 'Terowongan VPN Aktif';
+                popIp.textContent = `IP: ${state.server.ip} • ${state.server.ping}`;
+                switchBtn.textContent = 'Aktif';
+                switchBtn.className = 'px-3 py-1 rounded-full text-[11px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/30 transition';
+            } else {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-slate-500';
+                label.textContent = 'VPN: Nonaktif';
+                popStatus.textContent = 'Koneksi Langsung (Tanpa VPN)';
+                popIp.textContent = 'IP Asli Tidak Disamarkan';
+                switchBtn.textContent = 'Mati';
+                switchBtn.className = 'px-3 py-1 rounded-full text-[11px] font-medium bg-white/10 text-slate-300 border border-white/15 hover:bg-white/20 transition';
+            }
+
+            document.getElementById('shieldBadgeCount').textContent = state.blockedTrackers;
+            document.getElementById('popoverBlockedNum').textContent = state.blockedTrackers;
+        }
+
+        // Input & Autocomplete
+        function handleSearchInput(val) {
+            const clearBtn = document.getElementById('clearMainBtn');
+            const box = document.getElementById('autocompleteBox');
+            const list = document.getElementById('autocompleteList');
+
+            if (val.trim().length > 0) {
+                clearBtn.classList.remove('hidden');
+            } else {
+                clearBtn.classList.add('hidden');
+                box.classList.add('hidden');
+                return;
+            }
+
+            const matches = suggestionsPool.filter(s => s.toLowerCase().includes(val.toLowerCase()));
+            const items = matches.length > 0 ? matches : [val];
+
+            list.innerHTML = items.map(item => `
+                <button type="button" onclick="quickSearch('${item.replace(/'/g, "\\'")}')" class="w-full px-4 py-2 text-left text-xs sm:text-sm text-slate-300 hover:text-white hover:bg-white/10 flex items-center gap-2.5 transition">
+                    <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                    </svg>
+                    <span class="truncate">${item}</span>
+                </button>
+            `).join('');
+
+            box.classList.remove('hidden');
+        }
+
+        function clearSearchInput(id) {
+            const el = document.getElementById(id);
+            el.value = '';
+            el.focus();
+            if (id === 'mainSearchInput') {
+                document.getElementById('clearMainBtn').classList.add('hidden');
+                document.getElementById('autocompleteBox').classList.add('hidden');
+            }
+        }
+
+        function quickSearch(q) {
+            document.getElementById('mainSearchInput').value = q;
+            document.getElementById('headerSearchInput').value = q;
+            document.getElementById('autocompleteBox').classList.add('hidden');
+            runSearch(q);
+        }
+
+        function handleSearchSubmit(e, inputId) {
+            e.preventDefault();
+            const q = document.getElementById(inputId).value.trim();
+            if (!q) return;
+            document.getElementById('mainSearchInput').value = q;
+            document.getElementById('headerSearchInput').value = q;
+            document.getElementById('autocompleteBox').classList.add('hidden');
+            runSearch(q);
+        }
+
+        // Eksekusi Pencarian & Render Hasil Polos
+        function runSearch(q) {
+            state.query = q;
+            state.blockedTrackers += Math.floor(Math.random() * 4) + 1;
+            syncSecurityUI();
+
+            document.getElementById('homeView').classList.add('hidden');
+            document.getElementById('resultsView').classList.remove('hidden');
+            document.getElementById('headerSearchContainer').classList.remove('hidden');
+
+            renderResults();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function setFilterTab(tab) {
+            state.tab = tab;
+            document.querySelectorAll('.res-tab').forEach(btn => {
+                if (btn.dataset.tab === tab) {
+                    btn.className = 'res-tab text-white font-medium border-b-2 border-white pb-2.5 -mb-[11px] transition';
+                } else {
+                    btn.className = 'res-tab text-slate-400 hover:text-slate-200 pb-2.5 -mb-[11px] transition';
+                }
+            });
+            renderResults();
+        }
+
+        function renderResults() {
+            const container = document.getElementById('resultsContainer');
+            const q = state.query;
+            const slug = q.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'pencarian';
+            const timeSec = (Math.random() * 0.1 + 0.06).toFixed(2);
+            document.getElementById('resultsStatsText').textContent = `Terenkripsi via ${state.server.name} • ${timeSec} dtk`;
+
+            // Tampilan Tab Gambar
+            if (state.tab === 'images') {
+                const labels = ['Visualisasi', 'Infografis', 'Ilustrasi', 'Dokumentasi', 'Arsip', 'Diagram'];
+                container.innerHTML = `
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        ${labels.map((lbl, idx) => `
+                            <div onclick="openExternalSafe('${q}')" class="glass-thin rounded-xl p-3 cursor-pointer transition group">
+                                <div class="aspect-video rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center text-slate-400 group-hover:text-slate-200 mb-2">
+                                    <svg class="w-6 h-6 mb-1 opacity-60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                                    <span class="text-[11px]">${lbl} #${idx + 1}</span>
+                                </div>
+                                <p class="text-xs text-slate-300 truncate">${q}</p>
+                                <p class="text-[10px] text-slate-500 mt-0.5">Proksi Gambar Aman</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                return;
+            }
+
+            // Tampilan Tab Peta
+            if (state.tab === 'maps') {
+                container.innerHTML = `
+                    <div class="glass-thin rounded-2xl p-6 text-center space-y-3">
+                        <div class="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-slate-300">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                        </div>
+                        <p class="text-sm font-medium text-white">Peta Anonim: "${q}"</p>
+                        <p class="text-xs text-slate-400 max-w-md mx-auto">Koordinat GPS perangkat Anda tidak dibagikan. Pencarian lokasi diproses melalui node ${state.server.city}.</p>
+                        <a href="https://www.openstreetmap.org/search?query=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer" class="inline-block glass-thin rounded-full px-4 py-1.5 text-xs text-slate-200 hover:text-white transition">
+                            Buka di OpenStreetMap &rarr;
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            // Tampilan Tab Semua & Berita
+            const items = [
+                {
+                    domain: 'id.wikipedia.org',
+                    url: `https://id.wikipedia.org/wiki/${slug}`,
+                    title: `${q} - Ensiklopedia Bebas`,
+                    desc: `Artikel rujukan lengkap mengenai ${q}. Konten dimuat melalui lapisan perlindungan privasi tanpa pelacakan cookie pihak ketiga.`,
+                    blocked: 3
+                },
+                {
+                    domain: 'wawasan-teknologi.id',
+                    url: `https://wawasan-teknologi.id/artikel/${slug}`,
+                    title: `Ringkasan & Panduan Terkini Seputar ${q}`,
+                    desc: `Pembahasan terstruktur, analisis mendalam, dan informasi terbaru mengenai ${q} dari sumber yang telah diverifikasi keamanannya.`,
+                    blocked: 6
+                },
+                {
+                    domain: 'arsip-digital.org',
+                    url: `https://arsip-digital.org/dokumen/${slug}`,
+                    title: `Dokumentasi & Referensi Terbuka: ${q}`,
+                    desc: `Kumpulan publikasi, studi kasus, dan catatan teknis terkait ${q} yang dapat diakses secara anonim.`,
+                    blocked: 2
+                },
+                {
+                    domain: 'duckduckgo.com',
+                    url: `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
+                    title: `Telusuri "${q}" lebih luas melalui Indeks Web Terenkripsi`,
+                    desc: `Lanjutkan pencarian web langsung untuk kata kunci "${q}" menggunakan mesin pencari tanpa pelacakan eksternal.`,
+                    blocked: 5,
+                    external: true
+                }
+            ];
+
+            const filtered = state.tab === 'news' ? items.slice(1, 3) : items;
+
+            container.innerHTML = filtered.map(item => `
+                <article class="glass-thin rounded-2xl p-4 sm:p-5 transition">
+                    <div class="flex items-center justify-between gap-2 text-[11px] text-slate-400 mb-1">
+                        <span class="truncate">${item.domain}</span>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <span class="text-emerald-400/90">Terverifikasi Aman</span>
+                            <span>•</span>
+                            <span>${item.blocked} Pelacak Diblokir</span>
+                        </div>
+                    </div>
+                    <h2 class="text-sm sm:text-base font-medium text-slate-100 hover:text-white mb-1.5">
+                        ${item.external 
+                            ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer" class="hover:underline">${item.title} &nearr;</a>`
+                            : `<a href="#baca" onclick="openSafeReader(event, '${item.title.replace(/'/g, "\\'")}', '${item.domain}')" class="hover:underline">${item.title}</a>`
+                        }
+                    </h2>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        ${item.desc}
+                    </p>
+                </article>
+            `).join('');
+        }
+
+        function openSafeReader(e, title, domain) {
+            e.preventDefault();
+            notify(`Membuka ${domain} dalam mode terenkripsi`);
+        }
+
+        function openExternalSafe(query) {
+            window.open(`https://duckduckgo.com/?q=${encodeURIComponent(query)}&iax=images&ia=images`, '_blank', 'noopener,noreferrer');
+        }
+
+        // Reset & Hapus Sesi
+        function resetToHome() {
+            document.getElementById('resultsView').classList.add('hidden');
+            document.getElementById('headerSearchContainer').classList.add('hidden');
+            document.getElementById('homeView').classList.remove('hidden');
+            document.getElementById('mainSearchInput').value = '';
+            document.getElementById('clearMainBtn').classList.add('hidden');
+        }
+
+        function burnSession() {
+            resetToHome();
+            rotateIpAddress();
+            notify('Sesi dibersihkan & IP dirotasi');
+        }
+    </script>
+</body>
+</html>
